@@ -1,0 +1,8 @@
+**/target/
+.tools/
+.evidence/
+uploads/
+*.log
+.idea/
+*.iml
+node_modules/

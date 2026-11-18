@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Frame — Media library</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Frame home"
+        ><span class="brand-icon" aria-hidden="true">F</span>frame<span
+          class="brand-dot"
+          >.</span
+        ></a
+      ><span class="workspace">MEDIA WORKSPACE</span
+      ><span id="connection" class="connection">Connecting…</span>
+    </header>
+    <main>
+      <section class="heading">
+        <div>
+          <p class="eyebrow">YOUR COLLECTION, IN MOTION</p>
+          <h1>Media library<span>.</span></h1>
+          <p class="subtitle">
+            Every upload, ready to watch. Hover for a 10-second preview.
+          </p>
+        </div>
+        <span class="tag">gRPC connected library</span>
+      </section>
+      <section class="metrics" aria-label="Upload activity">
+        <div class="metric">
+          <span>Completed this session</span><strong id="completed">0</strong
+          ><small>Verified and saved</small>
+        </div>
+        <div class="metric">
+          <span>Active uploads</span
+          ><strong><span id="active">0</span><em id="workers">/ —</em></strong
+          ><small>Consumer workers</small>
+        </div>
+        <div class="metric">
+          <span>Waiting in queue</span
+          ><strong><span id="queued">0</span><em id="capacity">/ —</em></strong
+          ><small>Bounded waiting capacity</small>
+        </div>
+        <div class="metric">
+          <span>Dropped / failed</span
+          ><strong
+            ><span id="dropped">0</span
+            ><em>/ <span id="failed">0</span></em></strong
+          ><small>Full queue / transfer errors</small>
+        </div>
+      </section>
+      <section class="collection" aria-labelledby="collection-title">
+        <div class="collection-bar">
+          <div>
+            <h2 id="collection-title">
+              All videos <span id="count" class="count">0</span>
+            </h2>
+            <p>Saved to your consumer’s media folder</p>
+          </div>
+          <label class="search"
+            ><span aria-hidden="true">⌕</span
+            ><input
+              id="search"
+              type="search"
+              placeholder="Search your videos"
+              aria-label="Search videos"
+          /></label>
+        </div>
+        <p id="notice" class="notice" role="status" aria-live="polite">
+          Loading your library…
+        </p>
+        <div id="gallery" class="gallery"></div>
+        <div id="empty" class="empty" hidden>
+          <div class="empty-icon" aria-hidden="true">▷</div>
+          <h3>Your next frame starts here</h3>
+          <p>
+            Run a producer to upload videos. Completed uploads appear here
+            automatically.
+          </p>
+          <span class="empty-note">MP4 · WebM · M4V · MOV · OGV</span>
+        </div>
+      </section>
+      <footer>
+        <span><i class="live-dot"></i> Library refreshes automatically</span
+        ><span>Hover to preview · Click to watch · Keyboard accessible</span>
+      </footer>
+    </main>
+    <dialog id="player-dialog" aria-labelledby="player-title">
+      <div class="player-header">
+        <h2 id="player-title">Video</h2>
+        <button id="close-player" type="button" aria-label="Close player">
+          ✕
+        </button>
+      </div>
+      <video id="full-player" controls playsinline></video>
+      <p id="player-error" role="status"></p>
+    </dialog>
+  </body>
+</html>

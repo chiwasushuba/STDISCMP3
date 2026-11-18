@@ -1,0 +1,17 @@
+# Project-specific Codex skill registrations.
+# Add one enabled entry for every skill directory under .codex/skills:
+# [[skills.config]]
+# path = ".codex/skills/<skill-name>"
+# enabled = true
+
+[agents.media-upload-engineer]
+description = "Owns this exercise's Java gRPC upload lifecycle, bounded queue, and file storage."
+config_file = "agents/media-upload-engineer.toml"
+
+[agents.media-upload-reviewer]
+description = "Read-only review of assignment coverage, queue races, media behavior, and two-VM evidence."
+config_file = "agents/media-upload-reviewer.toml"
+
+[[skills.config]]
+path = ".codex/skills/media-upload-workflow"
+enabled = true
