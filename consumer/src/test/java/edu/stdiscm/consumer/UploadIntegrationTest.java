@@ -80,6 +80,22 @@ class UploadIntegrationTest {
   }
 
   @Test
+  void storesFinalChunkFollowedImmediatelyByHalfCloseAfterPauses() throws Exception {
+    byte[] bytes = Files.readAllBytes(input);
+    for (int delay : new int[] {0, 95, 100, 105, 195, 200, 205}) {
+      Raw raw = begin("boundary-" + delay + ".mp4", bytes.length, hash);
+      raw.admitted();
+      Thread.sleep(delay);
+      raw.chunk(bytes);
+      raw.requests.onCompleted();
+      String id = raw.done.get(5, TimeUnit.SECONDS);
+      assertArrayEquals(bytes, Files.readAllBytes(store.find(id)));
+    }
+    assertEquals(7, scheduler.snapshot().completed());
+    assertClean();
+  }
+
+  @Test
   void queueFullIsDroppedAndQueuedCancellationReleasesSlot() throws Exception {
     Raw active = begin("active.mp4", 4, hash);
     active.admitted();
@@ -121,6 +137,28 @@ class UploadIntegrationTest {
     assertEquals(Status.Code.INVALID_ARGUMENT, begin("x.mp4", 21 * 1024 * 1024, hash).code());
     assertEquals(Status.Code.INVALID_ARGUMENT, begin("x.mp4", 4, "bad").code());
     assertTrue(store.videos().isEmpty());
+    assertClean();
+  }
+
+  @Test
+  void validatesUtf8FilenameLengthBeforeAdmission() throws Exception {
+    byte[] bytes = Files.readAllBytes(input);
+    String fits = "\u96ea".repeat(71) + "a.mp4";
+    String tooLong = "\u96ea".repeat(71) + "aa.mp4";
+
+    Raw rejected = begin(tooLong, bytes.length, hash);
+    assertEquals(Status.Code.INVALID_ARGUMENT, rejected.code());
+    assertTrue(rejected.admission.isCompletedExceptionally());
+    assertEquals(0, scheduler.snapshot().failed());
+    assertTrue(store.videos().isEmpty());
+
+    Raw accepted = begin(fits, bytes.length, hash);
+    accepted.admitted();
+    accepted.chunk(bytes);
+    accepted.requests.onCompleted();
+    String id = accepted.done.get(5, TimeUnit.SECONDS);
+    assertEquals(fits, store.videos().get(0).name());
+    assertArrayEquals(bytes, Files.readAllBytes(store.find(id)));
     assertClean();
   }
 

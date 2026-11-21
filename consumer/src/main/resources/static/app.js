@@ -2,8 +2,8 @@
 const $ = (id) => document.getElementById(id);
 let videos = [];
 let signature = "";
-let initialized = false;
-let stopPreviews = [];
+const cards = new Map();
+const gallery = $("gallery");
 const dialog = $("player-dialog");
 const full = $("full-player");
 const codecMessage =
@@ -15,134 +15,157 @@ function sizeLabel(bytes) {
     : `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
+function stopAllPreviews() {
+  for (const entry of cards.values()) entry.stop();
+}
+
 function render() {
-  stopPreviews.forEach((stop) => stop());
-  stopPreviews = [];
-  $("gallery").replaceChildren();
+  const ids = new Set(videos.map((item) => item.id));
+  for (const [id, entry] of cards) {
+    if (!ids.has(id)) {
+      entry.stop();
+      entry.card.remove();
+      cards.delete(id);
+    }
+  }
+
   const query = $("search").value.trim().toLocaleLowerCase();
-  const visible = videos.filter((v) =>
-    v.name.toLocaleLowerCase().includes(query),
-  );
+  let visible = 0;
+  let next = gallery.firstElementChild;
+  for (const item of videos) {
+    let entry = cards.get(item.id);
+    if (!entry) {
+      entry = createCard(item);
+      cards.set(item.id, entry);
+    }
+    const matches = item.name.toLocaleLowerCase().includes(query);
+    if (!matches && !entry.card.hidden) entry.stop();
+    entry.card.hidden = !matches;
+    if (matches) visible++;
+    // Keep existing video elements attached during ordinary gallery refreshes.
+    if (entry.card !== next) gallery.insertBefore(entry.card, next);
+    next = entry.card.nextElementSibling;
+  }
+
   $("count").textContent = String(videos.length);
-  $("empty").hidden = visible.length > 0;
+  $("empty").hidden = visible > 0;
   $("empty").querySelector("h3").textContent = query
     ? "No matching videos"
-    : "Your next frame starts here";
+    : "No videos yet";
   $("empty").querySelector("p").textContent = query
     ? "Try another filename or clear your search."
     : "Run a producer to upload videos. Completed uploads appear here automatically.";
-  for (const item of visible) {
-    const card = document.createElement("article");
-    card.className = "card";
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "video-open";
-    button.setAttribute("aria-label", `Play ${item.name}`);
-    const preview = document.createElement("video");
-    const src = `/api/videos/${encodeURIComponent(item.id)}/content`;
-    preview.src = src;
-    preview.muted = true;
-    preview.playsInline = true;
-    preview.preload = "metadata";
-    preview.addEventListener("loadedmetadata", () => {
-      // Seek just inside the video to decode a still frame without starting playback.
-      if (Number.isFinite(preview.duration) && preview.duration > 0) {
-        preview.currentTime = Math.min(0.05, preview.duration / 2);
-      }
-    });
-    preview.setAttribute("aria-hidden", "true");
-    const badge = document.createElement("span");
-    badge.className = "preview-label";
-    badge.textContent = "10 SEC PREVIEW";
-    const icon = document.createElement("span");
-    icon.className = "play-icon";
-    icon.textContent = "▷";
-    icon.setAttribute("aria-hidden", "true");
-    button.append(preview, badge, icon);
-    const info = document.createElement("div");
-    info.className = "card-info";
-    const title = document.createElement("h3");
-    title.className = "card-title";
-    title.textContent = item.name;
-    title.title = item.name;
-    const meta = document.createElement("div");
-    meta.className = "card-meta";
-    const details = document.createElement("span");
-    details.textContent = `${item.name.split(".").pop().toUpperCase()} · ${sizeLabel(item.size)}`;
-    const date = document.createElement("time");
-    date.dateTime = item.uploadedAt;
-    date.textContent = new Date(item.uploadedAt).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-    });
-    meta.append(details, date);
-    const error = document.createElement("p");
-    error.className = "card-error";
-    error.hidden = true;
-    info.append(title, meta, error);
-    card.append(button, info);
-    let generation = 0;
-    let timer;
-    let hovered = false;
-    function stop() {
-      generation++;
-      clearTimeout(timer);
-      preview.pause();
-      if (preview.readyState > 0) preview.currentTime = 0;
-      button.classList.remove("previewing");
+}
+
+function createCard(item) {
+  const card = document.createElement("article");
+  card.className = "card";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "video-open";
+  button.setAttribute("aria-label", `Play ${item.name}`);
+  const preview = document.createElement("video");
+  const src = `/api/videos/${encodeURIComponent(item.id)}/content`;
+  preview.src = src;
+  preview.muted = true;
+  preview.playsInline = true;
+  preview.preload = "metadata";
+  preview.addEventListener("loadedmetadata", () => {
+    // Seek just inside the video to decode a still frame without starting playback.
+    if (Number.isFinite(preview.duration) && preview.duration > 0) {
+      preview.currentTime = Math.min(0.05, preview.duration / 2);
     }
-    async function start() {
-      stop();
-      if (dialog.open) return;
-      const token = generation;
-      try {
-        await preview.play();
-        if (token !== generation) {
-          // A later preview owns playback; only pause when there is no active interaction.
-          if (!hovered && document.activeElement !== button) preview.pause();
-          return;
-        }
-        button.classList.add("previewing");
-        timer = setTimeout(stop, 10000);
-      } catch (e) {
-        if (token === generation && e.name !== "AbortError") {
-          error.textContent = codecMessage;
-          error.hidden = false;
-        }
-      }
-    }
-    button.addEventListener("pointerenter", () => {
-      hovered = true;
-      start();
-    });
-    button.addEventListener("pointerleave", () => {
-      hovered = false;
-      stop();
-    });
-    button.addEventListener("focus", start);
-    button.addEventListener("blur", stop);
-    preview.addEventListener("timeupdate", () => {
-      if (preview.currentTime >= 10) stop();
-    });
-    preview.addEventListener("ended", stop);
-    preview.addEventListener("error", () => {
-      error.textContent = codecMessage;
-      error.hidden = false;
-    });
-    button.addEventListener("click", () => {
-      stopPreviews.forEach((stop) => stop());
-      $("player-title").textContent = item.name;
-      $("player-error").textContent = "";
-      full.src = src;
-      dialog.showModal();
-      full.play().catch((e) => {
-        if (e.name !== "AbortError")
-          $("player-error").textContent = codecMessage;
-      });
-    });
-    stopPreviews.push(stop);
-    $("gallery").append(card);
+  });
+  preview.setAttribute("aria-hidden", "true");
+  const badge = document.createElement("span");
+  badge.className = "preview-label";
+  badge.textContent = "10 SEC PREVIEW";
+  const icon = document.createElement("span");
+  icon.className = "play-icon";
+  icon.textContent = "▷";
+  icon.setAttribute("aria-hidden", "true");
+  button.append(preview, badge, icon);
+  const info = document.createElement("div");
+  info.className = "card-info";
+  const title = document.createElement("h3");
+  title.className = "card-title";
+  title.textContent = item.name;
+  title.title = item.name;
+  const meta = document.createElement("div");
+  meta.className = "card-meta";
+  const details = document.createElement("span");
+  details.textContent = `${item.name.split(".").pop().toUpperCase()} · ${sizeLabel(item.size)}`;
+  const date = document.createElement("time");
+  date.dateTime = item.uploadedAt;
+  date.textContent = new Date(item.uploadedAt).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+  meta.append(details, date);
+  const error = document.createElement("p");
+  error.className = "card-error";
+  error.hidden = true;
+  info.append(title, meta, error);
+  card.append(button, info);
+  let generation = 0;
+  let timer;
+  let hovered = false;
+  function stop() {
+    generation++;
+    clearTimeout(timer);
+    preview.pause();
+    if (preview.readyState > 0) preview.currentTime = 0;
+    button.classList.remove("previewing");
   }
+  async function start() {
+    stop();
+    if (dialog.open) return;
+    const token = generation;
+    try {
+      await preview.play();
+      if (token !== generation) {
+        // A later preview owns playback; only pause when there is no active interaction.
+        if (!hovered && document.activeElement !== button) preview.pause();
+        return;
+      }
+      button.classList.add("previewing");
+      timer = setTimeout(stop, 10000);
+    } catch (e) {
+      if (token === generation && e.name !== "AbortError") {
+        error.textContent = codecMessage;
+        error.hidden = false;
+      }
+    }
+  }
+  button.addEventListener("pointerenter", () => {
+    hovered = true;
+    start();
+  });
+  button.addEventListener("pointerleave", () => {
+    hovered = false;
+    stop();
+  });
+  button.addEventListener("focus", start);
+  button.addEventListener("blur", stop);
+  preview.addEventListener("timeupdate", () => {
+    if (preview.currentTime >= 10) stop();
+  });
+  preview.addEventListener("ended", stop);
+  preview.addEventListener("error", () => {
+    error.textContent = codecMessage;
+    error.hidden = false;
+  });
+  button.addEventListener("click", () => {
+    stopAllPreviews();
+    $("player-title").textContent = item.name;
+    $("player-error").textContent = "";
+    full.src = src;
+    dialog.showModal();
+    full.play().catch((e) => {
+      if (e.name !== "AbortError") $("player-error").textContent = codecMessage;
+    });
+  });
+  return { card, stop };
 }
 
 function closePlayer() {
@@ -163,7 +186,7 @@ full.addEventListener("error", () => {
 $("search").addEventListener("input", render);
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
-    stopPreviews.forEach((stop) => stop());
+    stopAllPreviews();
     full.pause();
   }
 });
@@ -194,10 +217,9 @@ async function refresh() {
     $("connection").className = "connection online";
     $("notice").textContent = "";
     const next = JSON.stringify(list);
-    if (!initialized || next !== signature) {
+    if (next !== signature) {
       videos = list;
       signature = next;
-      initialized = true;
       render();
     }
   } catch (e) {

@@ -170,7 +170,10 @@ public final class UploadService extends MediaUploadGrpc.MediaUploadImplBase {
               lastChunk = System.nanoTime();
               output.request(1);
             } else if (ended) {
-              break;
+              // The last frame can arrive between the poll timing out and half-close.
+              if (chunks.isEmpty()) {
+                break;
+              }
             } else if (System.nanoTime() - lastChunk
                 > TimeUnit.SECONDS.toNanos(settings.idleSeconds())) {
               synchronized (this) {

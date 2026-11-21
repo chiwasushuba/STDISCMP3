@@ -3,7 +3,9 @@ package edu.stdiscm.consumer;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -17,6 +19,9 @@ import org.springframework.stereotype.Component;
 @Component
 public final class VideoStore implements AutoCloseable {
   public static final Set<String> EXTENSIONS = Set.of("mp4", "webm", "m4v", "mov", "ogv");
+  private static final int UUID_LENGTH = 36;
+  private static final int STORED_PREFIX_LENGTH = UUID_LENGTH + 1;
+  private static final int MAX_FILENAME_UTF8_BYTES = 255 - STORED_PREFIX_LENGTH;
   private final Path root;
   private final Path staging;
   private final FileChannel lockChannel;
@@ -65,12 +70,16 @@ public final class VideoStore implements AutoCloseable {
   public static void validateName(String name) {
     if (name.isBlank()
         || name.length() > 160
+        || name.getBytes(StandardCharsets.UTF_8).length > MAX_FILENAME_UTF8_BYTES
         || name.equals(".")
         || name.equals("..")
         || name.chars().anyMatch(c -> c < 32 || "\\/:*?\"<>|".indexOf(c) >= 0)
         || !EXTENSIONS.contains(extension(name))) {
       throw new IllegalArgumentException(
-          "Use a plain video filename (mp4, webm, m4v, mov, ogv), max 160 characters");
+          "Use a plain video filename (mp4, webm, m4v, mov, ogv), "
+              + "max 160 characters and "
+              + MAX_FILENAME_UTF8_BYTES
+              + " UTF-8 bytes");
     }
   }
 
@@ -95,36 +104,41 @@ public final class VideoStore implements AutoCloseable {
                   String id = path.getFileName().toString();
                   return new Video(
                       id,
-                      id.substring(37),
+                      id.substring(STORED_PREFIX_LENGTH),
                       Files.size(path),
                       Files.getLastModifiedTime(path).toInstant());
                 } catch (IOException e) {
                   throw new java.io.UncheckedIOException(e);
                 }
               })
-          .sorted(Comparator.comparing(Video::uploadedAt).reversed())
+          .sorted(Comparator.comparing(Video::uploadedAt).reversed().thenComparing(Video::id))
           .toList();
     }
   }
 
   private boolean isVideo(Path path) {
     String name = path.getFileName().toString();
-    if (name.length() < 38
-        || name.charAt(36) != '_'
+    if (name.length() <= STORED_PREFIX_LENGTH
+        || name.charAt(UUID_LENGTH) != '_'
         || !EXTENSIONS.contains(extension(name))
         || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
       return false;
     }
     try {
-      return UUID.fromString(name.substring(0, 36)).toString().equals(name.substring(0, 36));
+      String id = name.substring(0, UUID_LENGTH);
+      return UUID.fromString(id).toString().equals(id);
     } catch (IllegalArgumentException e) {
       return false;
     }
   }
 
   public Path find(String id) {
-    Path path = root.resolve(id).normalize();
-    return root.equals(path.getParent()) && isVideo(path) ? path : null;
+    try {
+      Path path = root.resolve(id);
+      return root.equals(path.getParent()) && isVideo(path) ? path : null;
+    } catch (InvalidPathException e) {
+      return null;
+    }
   }
 
   @Override

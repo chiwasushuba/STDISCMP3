@@ -1,6 +1,6 @@
 # Frame: Java gRPC media upload
 
-Java producer–consumer assignment with a Spring Boot browser gallery. Producers
+Java producer–consumer app with a Spring Boot browser gallery. Producers
 and the consumer are separate processes and can run on different VMs.
 
 ## Build
@@ -50,7 +50,8 @@ Counts appear in the gallery and `/api/status`. Session counters reset on restar
 completed videos remain visible. Hover or keyboard focus previews at most ten
 seconds. Leaving the tile, reaching the end, opening the full player, or hiding
 the tab stops previews. Click or press Enter to open full playback. Escape closes
-the player. Touch users can tap directly for full playback.
+the player and returns focus to its tile, even when new uploads appear while the
+player is open. Touch users can tap directly for full playback.
 
 ## Producer VM
 
@@ -105,56 +106,30 @@ is deterministic in tests by holding active workers before submitting excess wor
 
 ## Video and network compatibility
 
+Browser JavaScript reads gallery data and handles display, search, previews, and
+playback. The Java producer and consumer handle gRPC uploads, queueing, validation,
+and storage independently of the browser.
+
 Accepted extensions: MP4, WebM, M4V, MOV, OGV. Browser support also depends on the
 codecs inside the container. Use MP4 with H.264/AAC or browser-compatible WebM
 for demonstrations. Files with unsupported codecs remain downloadable via the
 content endpoint and display a playback error. The service checks transfer
 integrity; it does not transcode or certify that arbitrary bytes form a video.
+Use filenames within 160 characters and 218 UTF-8 bytes, including the extension.
+This leaves room for the consumer's generated prefix in the stored filename.
 HTTP byte ranges support video seeking and previews without full-file downloads.
 
 Use a reachable private consumer address and permit TCP 9090 from the producer VM
 and TCP 8080 from the viewing machine. The consumer binds both listeners to all
-interfaces. This coursework configuration uses plaintext gRPC/HTTP without
+interfaces. This configuration uses plaintext gRPC/HTTP without
 authentication and is intended for an isolated, trusted VM network.
 
-## Verification and demonstration
+## Demo
 
-`mvnw.cmd clean verify` runs Java formatting checks and the automated JUnit suite:
-concurrent queue bounds, overload, q=0, streamed file integrity, filename collisions,
-unsafe names, malformed frames, cancellation, truncation, checksum mismatch,
-oversized chunks, idle timeout, storage failure, shutdown, restart, folder locking,
-configuration validation, and HTTP ranges. These are locally designed cases;
-instructor cases have not yet been provided.
-
-Optional original synthetic fixtures (requires ffmpeg for generation only):
-
-```powershell
-python scripts/generate-fixtures.py
-```
-
-This creates `.evidence/fixtures/producer-1/twelve-seconds.mp4` and
-`.evidence/fixtures/producer-2/two-seconds.mp4`, plus a deliberately invalid file
-in `.evidence/fixtures/producer-3/unplayable.mp4` for the browser error case.
-Upload all three folders with p=3 for browser verification. Optional browser
-checks require Node.js:
-
-```powershell
-npm ci
-npx playwright install chromium
-npm run test:browser
-```
-
-The browser check expects the three fixtures in the running gallery at
-`http://127.0.0.1:8080`; set `BASE_URL` to another consumer URL if needed. It records
-screenshots, results, and a silent browser video in `.evidence/browser/`.
-It also runs two local producer workers against the default gRPC port to verify
-live updates; those checks use the built producer JAR and generated local folders.
-See [verification evidence](docs/verification.md) for actual observed results and
-[demonstration steps](docs/demonstration.md) for the two-VM recording checklist.
-
-Queue-full feedback implements bonus 1. Content duplicate detection and video
-compression (bonuses 2 and 3) are not implemented. Same-name files are preserved
-under separate UUIDs, including identical content uploaded more than once.
+Watch the [recorded demo](docs/demo-local.mp4) or follow the
+[demo steps](docs/demonstration.md) to upload the included MP4 from a fresh build.
+The Maven build runs the JUnit tests for uploads, queueing, storage, and HTTP
+media delivery.
 
 ## Source map
 
@@ -163,8 +138,8 @@ protocol/    protobuf messages and generated gRPC service API
 producer/    p folder workers, streaming client, CLI validation
 consumer/    c upload workers, bounded admission, file storage, HTTP API
   src/main/resources/static/   browser gallery and video player
-scripts/     optional fixture generation and browser checks
-docs/        verification and submission guidance
+scripts/     optional demo fixture generator
+docs/        demo recording and run instructions
 ```
 
 Framework references: [Spring Boot requirements](https://docs.spring.io/spring-boot/3.5/system-requirements.html),

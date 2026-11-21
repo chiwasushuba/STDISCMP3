@@ -83,6 +83,10 @@ class GalleryHttpTest {
         http.getForEntity("/api/videos/missing.mp4/content", String.class).getStatusCode());
     assertEquals(
         HttpStatus.NOT_FOUND,
+        http.getForEntity("/api/videos/{id}/content", String.class, "invalid|name.mp4")
+            .getStatusCode());
+    assertEquals(
+        HttpStatus.NOT_FOUND,
         http.getForEntity("/api/videos/.consumer.lock/content", String.class).getStatusCode());
     headers.set(HttpHeaders.RANGE, "bytes=2000-3000");
     assertEquals(
